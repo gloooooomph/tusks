@@ -3,6 +3,10 @@ abstract class Task {
   const Task({required this.name});
   final String name;
   double getUrgency(DateTime currentTime, DateTime lastCompleted);
+
+  Map<String, dynamic> toJson() {
+    return {'name': name};
+  }
 }
 
 class DailyTask extends Task {
@@ -18,6 +22,8 @@ class DailyTask extends Task {
       return currentTime.difference(currentTime.atStartOfDay()).inSeconds / secondsInOneDay;
     }
   }
+
+  DailyTask.fromJson(Map<String, dynamic> json) : super(name: json['name']);
   
 }
 

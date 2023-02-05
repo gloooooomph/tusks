@@ -1,37 +1,47 @@
 import 'dart:async';
-import 'dart:html';
+import 'dart:convert';
+import 'dart:developer';
 
+import 'package:flutest/newTask.dart';
 import 'package:flutest/task.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  var task = DailyTask(name: "chekese");
-  // var tasks = List<TaskData>.generate(200, (index) => TaskData(UrgentTask(index.toString(), index.toDouble() / 200), DateTime.now()));
-  var time = DateTime.now();
-  var widget = TasksApp();
+  var widget = FutureBuilder<String>(
+      future: TasksApp.getInitialState(),
+      builder: (BuildContext context, AsyncSnapshot<String> snap) {
+        log('rebuilding ${snap.data}');
+        var data = snap.data;
+        if (data == null) {
+          return Text('Loading');
+        } else {
+          return TasksApp(initialStateString: data);
+        }
+      }
+  );
   runApp(MaterialApp(
-    home: Scaffold(
-      appBar: AppBar(
-        title: Text("title")
-      ),
-      body: Center(
-        child: widget,
-      )
-    ),
-    title: 'lkjhlkjh'
+    home: widget,
+    title: 'lkjhlkjh',
   ));
 }
 
 Color getColor(double urgency) {
   var red = Colors.green.red + urgency * (Colors.red.red - Colors.green.red);
-  var green = Colors.green.green + urgency * (Colors.red.green - Colors.green.green);
-  var blue = Colors.green.blue + urgency * (Colors.red.blue - Colors.green.blue);
+  var green =
+      Colors.green.green + urgency * (Colors.red.green - Colors.green.green);
+  var blue =
+      Colors.green.blue + urgency * (Colors.red.blue - Colors.green.blue);
   return Color.fromRGBO(red.toInt(), green.toInt(), blue.toInt(), 1.0);
 }
 
 class Bar extends StatelessWidget {
-  const Bar({super.key, required this.task, required this.currentTime, required this.lastCompleted, required this.completeTask});
+  const Bar(
+      {super.key,
+      required this.task,
+      required this.currentTime,
+      required this.lastCompleted,
+      required this.completeTask});
 
   final Task task;
   final DateTime currentTime;
@@ -58,7 +68,11 @@ class Bar extends StatelessWidget {
 }
 
 class Bars extends StatelessWidget {
-  const Bars({super.key, required this.tasks, required this.currentTime, required this.completeTask});
+  const Bars(
+      {super.key,
+      required this.tasks,
+      required this.currentTime,
+      required this.completeTask});
 
   final List<TaskData> tasks;
   final DateTime currentTime;
@@ -66,15 +80,19 @@ class Bars extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    tasks.sort((b, a) => (a.task.getUrgency(currentTime, a.lastCompleted) - b.task.getUrgency(currentTime, b.lastCompleted)).sign.toInt());
+    tasks.sort((b, a) => (a.task.getUrgency(currentTime, a.lastCompleted) -
+            b.task.getUrgency(currentTime, b.lastCompleted))
+        .sign
+        .toInt());
     return ListView(
-      children: tasks.map((e) => Bar(
-        task: e.task,
-        currentTime: currentTime,
-        lastCompleted: e.lastCompleted,
-        completeTask: completeTask,
-      )).toList()
-    );
+        children: tasks
+            .map((e) => Bar(
+                  task: e.task,
+                  currentTime: currentTime,
+                  lastCompleted: e.lastCompleted,
+                  completeTask: completeTask,
+                ))
+            .toList());
   }
 }
 
@@ -86,34 +104,91 @@ class TaskData {
 }
 
 class TasksApp extends StatefulWidget {
-  const TasksApp({super.key});
+  const TasksApp({super.key, required this.initialStateString});
+  final String initialStateString;
+
+  static Future<String> getInitialState() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    var data = prefs.getString(TasksAppState.PREFS_KEY);
+    if (data == null) {
+      return '';
+    } else {
+      return data;
+    };
+  }
 
   @override
   State<StatefulWidget> createState() {
-    var tasks = Map.fromEntries(List<MapEntry<Task, DateTime>>.generate(10, (index) => MapEntry(FrequentTask(frequency: Duration(minutes: 1), name: index.toString()), DateTime.now().atStartOfDay())));
+    log("localiss: $initialStateString");
+    if (initialStateString == '') {
+      return TasksAppState({});
+    }
+    var encoded = jsonDecode(initialStateString);
+    log("state: $encoded");
+    var tasks = encoded.map<Task, DateTime>((key, value) => MapEntry(DailyTask.fromJson(jsonDecode(key)), DateTime.fromMillisecondsSinceEpoch(value)));
+    log("tasks: $tasks");
     return TasksAppState(tasks);
-  }}
+  }
+}
 
 class TasksAppState extends State {
-  TasksAppState(this.tasks)
-  : now = DateTime.now();
+  TasksAppState(this.tasks) : now = DateTime.now();
+  static const String PREFS_KEY = "tasks_state";
 
   Map<Task, DateTime> tasks;
   DateTime now;
 
+  Future<void> serializeState() async {
+    final prefs = await SharedPreferences.getInstance();
+    Map<String, int> stringifiedTasks = tasks.map((key, value) => MapEntry(jsonEncode(key.toJson()), value.millisecondsSinceEpoch));
+    String encoded = jsonEncode(stringifiedTasks);
+    await prefs.setString(PREFS_KEY, encoded);
+    final prefs2 = await SharedPreferences.getInstance();
+    String? thing = prefs2.getString(PREFS_KEY);
+    log("$thing");
+  }
+
   @override
   Widget build(BuildContext context) {
     var currentTime = DateTime.now();
-    var tasksAsList = tasks.entries.map((entry) => TaskData(entry.key, entry.value)).toList();
-    completeTask(task) => setState(() =>tasks[task] = now);
-    return Bars(tasks: tasksAsList, currentTime: currentTime, completeTask: completeTask,);
+    var tasksAsList =
+        tasks.entries.map((entry) => TaskData(entry.key, entry.value)).toList();
+    completeTask(task) => setState(() {
+      tasks[task] = now;
+      serializeState();
+    });
+    log("state built called");
+    return Scaffold(
+        appBar: AppBar(title: Text("title")),
+        body: Center(
+          child: Bars(
+            tasks: tasksAsList,
+            currentTime: currentTime,
+            completeTask: completeTask,
+          ),
+        ),
+        floatingActionButton: FloatingActionButton(
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) {
+                return NewTask(callback: (task) {
+                  setState(() {
+                    tasks[task] = DateTime.fromMicrosecondsSinceEpoch(0);
+                    serializeState();
+                  });
+                });
+              }));
+            },
+            child: const Icon(Icons.create)
+        ));
   }
 
   @override
   void initState() {
     super.initState();
-    Timer.periodic(Duration(seconds: 1), (timer) => setState(() {
-      now = DateTime.now();
-    }));
+    Timer.periodic(
+        Duration(seconds: 1),
+        (timer) => setState(() {
+              now = DateTime.now();
+            }));
   }
 }
