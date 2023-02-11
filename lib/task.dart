@@ -4,6 +4,16 @@ abstract class Task {
   final String name;
   double getUrgency(DateTime currentTime, DateTime lastCompleted);
   Map<String, dynamic> toJson();
+  bool repeat();
+
+  static Task fromJson(Map<String, dynamic> json) {
+    if (!json.containsKey('type') || json['type'] == 'daily') {
+      return DailyTask.fromJson(json);
+    } else if (json['type'] == 'oneOff') {
+      return OneOffTask.fromJson(json);
+    }
+    throw Exception("inexhaustive pattern in task.fromJson");
+  }
 }
 
 class DailyTask extends Task {
@@ -30,24 +40,55 @@ class DailyTask extends Task {
 
   @override
   Map<String, dynamic> toJson() {
-    return {'name': name, 'days': days};
+    return {'name': name, 'days': days, 'type': 'daily'};
+  }
+
+  @override
+  bool repeat() {
+    return true;
   }
 }
 
-class FrequentTask extends Task {
-  const FrequentTask({required super.name,  required this.frequency});
+class OneOffTask extends Task {
+  final DateTime deadline;
+  final DateTime start;
 
-  final Duration frequency;
+  const OneOffTask({required super.name, required DateTime this.start, required DateTime this.deadline});
 
   @override
   double getUrgency(DateTime currentTime, DateTime lastCompleted) {
-    return (currentTime.difference(lastCompleted).inSeconds.toDouble() / frequency.inSeconds).clamp(0.0, 1.0);
+    return currentTime.fractionThroughTimePeriod(start, deadline);
   }
 
   @override
   Map<String, dynamic> toJson() {
-    // TODO: implement toJson
-    throw UnimplementedError();
+    return {'name': name, 'start': start.millisecondsSinceEpoch, 'deadline': deadline.millisecondsSinceEpoch, 'type': 'oneOff'};
+  }
+
+  OneOffTask.fromJson(Map<String, dynamic> json) : start = DateTime.fromMillisecondsSinceEpoch(json['start']), deadline = DateTime.fromMillisecondsSinceEpoch(json['deadline']), super(name: json['name']);
+
+  @override
+  bool repeat() {
+    return false;
+  }
+}
+
+class StartAndEnd {
+  final DateTime start;
+  final DateTime end;
+
+  StartAndEnd(this.start, this.end);
+
+  DateTime _adjustToToday(DateTime today, DateTime time) {
+    return DateTime(today.year, today.month, time.day, time.hour, time.minute, time.second);
+  }
+
+  DateTime getStart(DateTime today) {
+    return _adjustToToday(today, start);
+  }
+
+  DateTime getEnd(DateTime today) {
+    return _adjustToToday(today, end);
   }
 }
 
@@ -62,5 +103,9 @@ extension DateTimeUtils on DateTime {
 
   DateTime atEndOfDay() {
     return add(const Duration(days: 1)).atStartOfDay();
+  }
+
+  double fractionThroughTimePeriod(DateTime start, DateTime end) {
+    return difference(start).inSeconds / end.difference(start).inSeconds;
   }
 }

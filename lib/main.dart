@@ -125,7 +125,7 @@ class TasksApp extends StatefulWidget {
     }
     var encoded = jsonDecode(initialStateString);
     log("state: $encoded");
-    var tasks = encoded.map<Task, DateTime>((key, value) => MapEntry(DailyTask.fromJson(jsonDecode(key)), DateTime.fromMillisecondsSinceEpoch(value)));
+    var tasks = encoded.map<Task, DateTime>((key, value) => MapEntry(Task.fromJson(jsonDecode(key)), DateTime.fromMillisecondsSinceEpoch(value)));
     log("tasks: $tasks");
     return TasksAppState(tasks);
   }
@@ -154,10 +154,13 @@ class TasksAppState extends State {
     var tasksAsList =
         tasks.entries.map((entry) => TaskData(entry.key, entry.value)).toList();
     completeTask(task) => setState(() {
-      tasks[task] = now;
+      if (task.repeat()) {
+        tasks[task] = now;
+      } else {
+        tasks.remove(task);
+      }
       serializeState();
     });
-    log("state built called");
     return Scaffold(
         appBar: AppBar(title: Text("title")),
         body: Center(
