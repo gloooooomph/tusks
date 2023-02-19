@@ -25,15 +25,35 @@ class DailyTask extends Task {
 
   @override
   double getUrgency(DateTime currentTime, DateTime lastCompleted) {
-    if (currentTime.sameDayAs(lastCompleted) || !isActiveToday(currentTime)) {
+
+    var lastDeadline = getLastDeadline(currentTime);
+    if (lastDeadline == null) {
       return 0.0;
-    } else {
+    }
+
+    var prevStart = lastDeadline.subtract(Duration(days: 1));
+    if (lastCompleted.isBefore(prevStart)) {
+      return 1.0;
+    }
+    if (isActiveToday(currentTime) && lastCompleted.isBefore(currentTime.atStartOfDay())) {
       return currentTime.difference(currentTime.atStartOfDay()).inSeconds / secondsInOneDay;
+    } else {
+      return 0.0;
     }
   }
 
+  DateTime? getLastDeadline(DateTime currentTime) {
+    for (int i = 1; i < 8; i++) {
+      var day = (currentTime.day - 1 - i) % 7;
+      if (days[day]) {
+        return currentTime.subtract(Duration(days: i)).atEndOfDay();
+      }
+    }
+    return null;
+  }
+
   bool isActiveToday(DateTime currentTime) {
-    return days[currentTime.weekday];
+    return days[currentTime.weekday - 1];
   }
 
   DailyTask.fromJson(Map<String, dynamic> json) : days = json['days'].cast<bool>(), super(name: json['name']);
