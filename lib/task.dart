@@ -77,6 +77,11 @@ class OneOffTask extends Task {
 
   @override
   double getUrgency(DateTime currentTime, DateTime lastCompleted) {
+    if (currentTime.isBefore(start)) {
+      return 0.0;
+    } else if (currentTime.isAfter(deadline)) {
+      return 1.0;
+    }
     return currentTime.fractionThroughTimePeriod(start, deadline);
   }
 
