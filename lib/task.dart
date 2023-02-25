@@ -11,6 +11,8 @@ abstract class Task {
       return DailyTask.fromJson(json);
     } else if (json['type'] == 'oneOff') {
       return OneOffTask.fromJson(json);
+    } else if (json['type'] == 'delay') {
+      return DelayTask.fromJson(json);
     }
     throw Exception("inexhaustive pattern in task.fromJson");
   }
@@ -96,6 +98,54 @@ class OneOffTask extends Task {
   bool repeat() {
     return false;
   }
+}
+
+enum Unit {
+  hours, days, weeks
+}
+
+class DelayTask extends Task {
+  final int min;
+  final int max;
+  final Unit unit;
+  
+  const DelayTask({required super.name, required this.min, required this.max, required this.unit});
+
+  @override
+  double getUrgency(DateTime currentTime, DateTime lastCompleted) {
+    var start = lastCompleted.add(_getDelay(min));
+    var deadline = lastCompleted.add(_getDelay(max));
+    if (deadline.isBefore(currentTime)) {
+      return 1.0;
+    } else if (start.isAfter(currentTime)) {
+      return 0.0;
+    }
+    return currentTime.fractionThroughTimePeriod(start, deadline);
+  }
+  
+  Duration _getDelay(int number) {
+    if (unit == Unit.hours) {
+      return Duration(hours: number);
+    }
+    if (unit == Unit.days) {
+      return Duration(days: number);
+    }
+    return Duration(days: 7 * number);
+  }
+
+  @override
+  bool repeat() {
+    return true;
+  }
+
+  @override
+  Map<String, dynamic> toJson() {
+    return {'name': name, 'min': min, 'max': max, 'unit': unit, 'type': 'delay'};
+  }
+
+  DelayTask.fromJson(Map<String, dynamic> json) : min = json['min'], max = json['max'], unit = json['unit'], super(name: json['name']);
+  
+  
 }
 
 class StartAndEnd {
